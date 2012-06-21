@@ -3,7 +3,7 @@
 """Reads sensor data and generate plots and a summar page.
 
 This tool follows a text output file with the format as defined in acquire.py,
-and every 10 seconds generates a summary page with plots for:
+and every 20 seconds generates a summary page with plots for:
     * last minute
     * last hour
     * current day
@@ -103,4 +103,4 @@ if __name__=="__main__":
         PlotLastDay(data, '/var/www/solar/plots/')
         plottime = time.time() - start
         print time.ctime(), '| Generated plots in', plottime, 's'
-        time.sleep(10 - plottime)
+        time.sleep(max(20 - plottime, 1))
