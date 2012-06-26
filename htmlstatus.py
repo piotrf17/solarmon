@@ -15,6 +15,22 @@ import time
 import os
 import numpy
 from mako.template import Template
+import data_pb2
+
+def LoadOldData():
+    data = []
+    # Construct filename for yesterday.
+    yesterday = datetime.date.today() + datetime.timedelta(days=-1)
+    filename = '%4d%02d%02d.dat'%(yesterday.year, yesterday.month, yesterday.day)
+    filename = os.path.join('data', filename)
+    # Load proto.
+    solar_data = data_pb2.SolarData()
+    solar_data.ParseFromString(open(filename, 'rb').read())
+    # Unpack values into our simple lists.
+    for v in solar_data.data:
+        data.append([v.timestamp, v.solar_current, v.solar_voltage, 
+            v.battery_current, v.battery_voltage, v.temperature])
+    return data
 
 def Smooth(x,window_len=11,window='hanning'):
     s=numpy.r_[x[window_len-1:0:-1],x,x[-1:-window_len:-1]]
@@ -45,7 +61,7 @@ def FormatValues(values):
     for value in values:
         dt = datetime.datetime.fromtimestamp(value[0])
         time_str = 'new Date(%d, %d, %d, %d, %d, %d, %d)'%(dt.year, dt.month-1, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond/1000)
-        formatted.append('[%s, %f, %f, %f, %f],\n'%tuple([time_str]+list(value[1:])))
+        formatted.append('[%s, %f, %f, %f, %f, %f],\n'%tuple([time_str]+list(value[1:])))
     return ''.join(formatted)
 
 def GetLastMinute(data):
@@ -68,8 +84,8 @@ def GetAveragedTimePeriod(data, time_len, num_points):
     def ave(list):
         return float(sum(list)) / len(list)
     def average(values):
-        t, sc, sv, bc, bv = zip(*values)
-        return [t[len(t)/2], ave(sc), ave(sv), ave(bc), ave(bv)]
+        t, sc, sv, bc, bv, temp = zip(*values)
+        return [t[len(t)/2], ave(sc), ave(sv), ave(bc), ave(bv), ave(temp)]
     t0 = time.time() - time_len
     last_time = [x for x in data if x[0] > t0]
     output = []
@@ -79,17 +95,24 @@ def GetAveragedTimePeriod(data, time_len, num_points):
     return output
 
 if __name__=="__main__":
-    data = []
+    data = LoadOldData()
     last_pos = 0
+    current_filename = GetInputFilename()
     while True:
-        last_pos = ParseData(GetInputFilename(), last_pos, data)
+        # Handle filename switch over at midnight.
+        if GetInputFilename() != current_filename:
+            data = LoadOldData()
+            last_pos = 0
+            current_filename = GetInputFilename()
+        last_pos = ParseData(current_filename, last_pos, data)
         start = time.time()
         template = Template(filename='index.tpl')
-        open('/var/www/solar/index.html','w').write(template.render(
+        html = template.render(
             UPDATE_TIME=time.ctime(),
             LAST_MINUTE=FormatValues(GetLastMinute(data)),
             LAST_HOUR=FormatValues(GetAveragedTimePeriod(data, 60*60, 100)),
-            LAST_DAY=FormatValues(GetAveragedTimePeriod(data, 24*60*60, 100))))
+            LAST_DAY=FormatValues(GetAveragedTimePeriod(data, 24*60*60, 100)))
+        open('/var/www/solar/index.html', 'w').write(html)
         plottime = time.time() - start
         print time.ctime(), '| Generated plots in', plottime, 's'
         time.sleep(max(10 - plottime, 1))

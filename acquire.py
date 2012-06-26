@@ -3,6 +3,7 @@
 # timestamp1 solar_current1 solar_voltage1 battery_current1 battery_voltage1
 # etc.
 
+import binascii
 import datetime
 import os
 import serial
@@ -16,17 +17,18 @@ class XBMessage(object):
             data = data[1:]
         # Verify header data.
         assert data[0] == '\x7e'        # start delimeter
-        assert data[1:3] == '\x00\x10'  # length
+        assert data[1:3] == '\x00\x12'  # length
         assert data[3] == '\x83'        # API identifier
         assert data[4:6] == '\x22\x00'  # source address
         # Parse out information.
-        values = struct.unpack('!BBBHHHHH', data[6:19])
+        values = struct.unpack('!BBBHHHHHH', data[6:21])
         self.time = time.time()
         self.signal = values[0]
         self.solar_current = values[4]
         self.solar_voltage = values[5]
         self.battery_current = values[6]
         self.battery_voltage = values[7]
+        self.temperature = values[8]
 
 class SolarData(object):
     def __init__(self, xb_msg):
@@ -35,12 +37,13 @@ class SolarData(object):
         self.solar_voltage = xb_msg.solar_voltage / 30.42     # [V]
         self.battery_current = xb_msg.battery_current / 155.1 # [A]
         self.battery_voltage = xb_msg.battery_voltage / 30.66 # [V]
+        self.temperature = 275/1664.0*xb_msg.temperature - 800/39.0 # [deg C]
 
     def Print(self):
-        print '%s| (Panel) %fA %fV / (Battery) %fA %fV'%(time.ctime(self.time), self.solar_current, self.solar_voltage, self.battery_current, self.battery_voltage)
+        print '%s| (Panel) %fA %fV / (Battery) %fA %fV / %fC'%(time.ctime(self.time), self.solar_current, self.solar_voltage, self.battery_current, self.battery_voltage, self.temperature)
 
     def Write(self, outfile):
-        outfile.write('%f %f %f %f %f\n'%(self.time, self.solar_current, self.solar_voltage, self.battery_current, self.battery_voltage))
+        outfile.write('%f %f %f %f %f %f\n'%(self.time, self.solar_current, self.solar_voltage, self.battery_current, self.battery_voltage, self.temperature))
 
 def GetOutputFilename():
     today = datetime.date.today()
@@ -53,7 +56,7 @@ if __name__=="__main__":
     cur_filename = GetOutputFilename()
     outfile = open(cur_filename, 'a')
     while True:
-        xb_msg = XBMessage(ser.read(20))
+        xb_msg = XBMessage(ser.read(22))
         data = SolarData(xb_msg)
         data.Print()
         # Filename changes daily, for simplicity verify every output.

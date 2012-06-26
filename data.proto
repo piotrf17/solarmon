@@ -1,0 +1,29 @@
+package solarmon;
+
+message SolarDataPoint {
+  // Timestamp given as seconds since epoch.
+  optional float timestamp = 1;
+  
+  // Input current from solar panel in [A]
+  optional float solar_current = 2;
+
+  // Input voltage from solar panel in [V]
+  optional float solar_voltage = 3;
+  
+  // Output current from batteries in [A]
+  optional float battery_current = 4;
+ 
+  // Output voltage from batteries in [A]
+  optional float battery_voltage = 5;
+
+  // Temperature reading for the system. [C]
+  optional float temperature = 6;
+}
+
+message SolarData {
+  // Date for data collection (sort of redundant since we have timestamps).
+  optional string date = 1;
+
+  // Array of the data we saved for that day.
+  repeated SolarDataPoint data = 2;
+}
