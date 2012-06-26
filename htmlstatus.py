@@ -19,17 +19,21 @@ import data_pb2
 
 def LoadOldData():
     data = []
-    # Construct filename for yesterday.
-    yesterday = datetime.date.today() + datetime.timedelta(days=-1)
-    filename = '%4d%02d%02d.dat'%(yesterday.year, yesterday.month, yesterday.day)
-    filename = os.path.join('data', filename)
-    # Load proto.
-    solar_data = data_pb2.SolarData()
-    solar_data.ParseFromString(open(filename, 'rb').read())
-    # Unpack values into our simple lists.
-    for v in solar_data.data:
-        data.append([v.timestamp, v.solar_current, v.solar_voltage, 
-            v.battery_current, v.battery_voltage, v.temperature])
+    for days_ago in range(-6, 0):
+        # Construct the appropriate filename.
+        day = datetime.date.today() + datetime.timedelta(days=days_ago)
+        filename = '%4d%02d%02d.dat'%(day.year, day.month, day.day)
+        filename = os.path.join('data', filename)
+        if not(os.path.exists(filename)):
+            continue
+        # Load proto.
+        print 'Loading', filename
+        solar_data = data_pb2.SolarData()
+        solar_data.ParseFromString(open(filename, 'rb').read())
+        # Unpack values into our simple lists.
+        for v in solar_data.data:
+            data.append([v.timestamp, v.solar_current, v.solar_voltage, 
+                v.battery_current, v.battery_voltage, v.temperature])
     return data
 
 def Smooth(x,window_len=11,window='hanning'):
@@ -118,8 +122,9 @@ if __name__=="__main__":
         html = template.render(
             UPDATE_TIME=time.ctime(),
             LAST_MINUTE=FormatValues(GetLastMinute(data)),
-            LAST_HOUR=FormatValues(GetAveragedTimePeriod(data, 60*60, 100)),
-            LAST_DAY=FormatValues(GetAveragedTimePeriod(data, 24*60*60, 100)))
+            LAST_HOUR=FormatValues(GetAveragedTimePeriod(data, 60*60, 120)),
+            LAST_DAY=FormatValues(GetAveragedTimePeriod(data, 24*60*60, 144)),
+            LAST_WEEK=FormatValues(GetAveragedTimePeriod(data, 7*24*60*60, 168)))
         open('/var/www/solar/index.html', 'w').write(html)
         plottime = time.time() - start
         print time.ctime(), '| Generated plots in', plottime, 's'
