@@ -43,10 +43,15 @@ def GetAveragedTimePeriod(data, num_points):
         return float(sum(list)) / len(list)
     def average(values):
         return [ave(col) for col in zip(*values)]
+    t0 = data[0][0]
+    dt = float(data[-1][0] - t0 + 1) / num_points
+    buckets = [[] for i in range(num_points)]
+    for value in data:
+        buckets[int((value[0] - t0) / dt)].append(value)
     output = []
-    bucket_size = len(data) / num_points
-    for i in range(0, len(data), bucket_size):
-        output.append(average(data[i:i+bucket_size]))
+    for bucket in buckets:
+        if len(bucket):
+            output.append(average(bucket))
     return output
 
 if __name__ == "__main__":

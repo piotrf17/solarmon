@@ -81,17 +81,25 @@ def GetSmoothedTimePeriod(data, time_len):
     return zip(t, sc, sv, bc, bv)
 
 def GetAveragedTimePeriod(data, time_len, num_points):
+    """Average a list of data points based on time buckets.
+    
+    Averaging is done by buckets of equal size time, where
+    bucket_time = time_len / num_points
+    """
     def ave(list):
         return float(sum(list)) / len(list)
     def average(values):
-        t, sc, sv, bc, bv, temp = zip(*values)
-        return [t[len(t)/2], ave(sc), ave(sv), ave(bc), ave(bv), ave(temp)]
+        return [ave(col) for col in zip(*values)]
     t0 = time.time() - time_len
+    dt = float(time_len) / num_points
     last_time = [x for x in data if x[0] > t0]
+    buckets = [[] for i in range(num_points)]
+    for value in last_time:
+        buckets[int((value[0] - t0) / dt)].append(value)
     output = []
-    bucket_size = len(last_time) / num_points
-    for i in range(0, len(last_time), bucket_size):
-        output.append(average(last_time[i:i+bucket_size]))
+    for bucket in buckets:
+        if len(bucket):
+            output.append(average(bucket))
     return output
 
 if __name__=="__main__":
