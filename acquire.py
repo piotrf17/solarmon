@@ -10,18 +10,41 @@ import serial
 import struct
 import time
 
+class XBSource(object):
+    """A wrapper around a serial connected XB device."""
+
+    def __init__(self, device, baud):
+        self.device = serial.Serial(device, baud)
+        self.delim = '\x7e'
+    
+    def Read(self):
+        """Read an XB frame, following their API.
+
+        Look for the frame delimeter, then read the length and frame data.
+        Also verify the checksum on the frame.
+        """
+        # Keep trying till we get a valid packet.
+        while True:
+            # Look for frame delimiter.
+            c = self.device.read(1)
+            while c != self.delim:
+                c = self.device.read(1)
+            # Unpack length and read data.
+            length, = struct.unpack('>H', self.device.read(2))
+            data = self.device.read(length+1)
+            # Verify checksum.
+            if sum([ord(c) for c in data]) & 0xff == 0xff:
+                return data
+            else:
+                print '%s| packet fails checksum: %s' % (time.ctime(self.time()), binascii.hexlify(data))
+
 class XBMessage(object):
     def __init__(self, data):
-        # Fix alignment, if necessary.
-        if data[1] == '\x7e':
-            data = data[1:]
-        # Verify header data.
-        assert data[0] == '\x7e'        # start delimeter
-        assert data[1:3] == '\x00\x12'  # length
-        assert data[3] == '\x83'        # API identifier
-        assert data[4:6] == '\x22\x00'  # source address
-        # Parse out information.
-        values = struct.unpack('!BBBHHHHHH', data[6:21])
+        # Verify API frame for RX packet
+        assert data[0] == '\x83'       # API identifier for RX packet
+        assert data[1:3] == '\x22\x00' # source address
+        # Parse out information
+        values = struct.unpack('!BBBHHHHHH', data[3:18])
         self.time = time.time()
         self.signal = values[0]
         self.solar_current = values[4]
@@ -52,11 +75,14 @@ def GetOutputFilename():
     return filename
 
 if __name__=="__main__":
-    ser = serial.Serial('/dev/ttyUSB0', 9600)
+    source = XBSource('/dev/ttyUSB0', 9600)
     cur_filename = GetOutputFilename()
     outfile = open(cur_filename, 'a')
     while True:
-        xb_msg = XBMessage(ser.read(22))
+        try:
+            xb_msg = XBMessage(source.Read())
+        except AssertionError:
+            print '%s| ERROR: frame api data incorrect, dropping' % (time.ctime(self.time()))
         data = SolarData(xb_msg)
         data.Print()
         # Filename changes daily, for simplicity verify every output.
