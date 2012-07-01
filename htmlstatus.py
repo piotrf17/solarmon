@@ -10,12 +10,41 @@ and every 10 seconds generates a summary page with plots for:
 Each plot has solar and battery voltage and current on one plot.
 """
 
+import collections
 import datetime
 import time
 import os
 import numpy
 from mako.template import Template
 import data_pb2
+
+class AveragingBuffer(object):
+    """A circular buffer that provides averaged last values for a given time
+    period and resolution."""
+
+    def __init__(self, period, resolution):
+        self.buf = collections.deque(maxlen=resolution)
+        self.temp = []
+        self.last_cutoff = time.time() - period
+        self.period = float(period) / resolution
+
+    def _AverageTemp(self):
+        if self.temp:
+            average = [float(sum(col)) / len(col) for col in zip(*self.temp)]
+            self.buf.append(average)
+            self.temp = []
+        self.last_cutoff += self.period
+
+    def AddValues(self, data):
+        for value in data:
+            if value[0] > self.last_cutoff + self.period:
+                self._AverageTemp()
+            elif value[0] > self.last_cutoff:
+                self.temp.append(value)
+
+    def Last(self):
+        average = [float(sum(col)) / len(col) for col in zip(*self.temp)]
+        return list(self.buf) + [average]
 
 def LoadOldData():
     data = []
@@ -35,15 +64,6 @@ def LoadOldData():
             data.append([v.timestamp, v.solar_current, v.solar_voltage, 
                 v.battery_current, v.battery_voltage, v.temperature])
     return data
-
-def Smooth(x,window_len=11,window='hanning'):
-    s=numpy.r_[x[window_len-1:0:-1],x,x[-1:-window_len:-1]]
-    if window == 'flat': #moving average
-        w=numpy.ones(window_len,'d')
-    else:
-        w=eval('numpy.'+window+'(window_len)')
-    y=numpy.convolve(w/w.sum(),s,mode='same')
-    return y[window_len-1:-window_len+1]
 
 def GetInputFilename():
     today = datetime.date.today()
@@ -68,63 +88,39 @@ def FormatValues(values):
         formatted.append('[%s, %f, %f, %f, %f, %f],\n'%tuple([time_str]+list(value[1:])))
     return ''.join(formatted)
 
-def GetLastMinute(data):
-    t0 = time.time() - 60
-    last_minute = [x for x in data if x[0] > t0]
-    return last_minute
-
-def GetSmoothedTimePeriod(data, time_len):
-    t0 = time.time() - time_len
-    last_hour = [x for x in data if x[0] > t0]
-    last_hour = last_hour[::(time_len/60)]
-    t, sc, sv, bc, bv = zip(*last_hour)
-    sc = Smooth(sc, 11)
-    sv = Smooth(sv, 11)
-    bc = Smooth(bc, 11)
-    bv = Smooth(bv, 11)
-    return zip(t, sc, sv, bc, bv)
-
-def GetAveragedTimePeriod(data, time_len, num_points):
-    """Average a list of data points based on time buckets.
-    
-    Averaging is done by buckets of equal size time, where
-    bucket_time = time_len / num_points
-    """
-    def ave(list):
-        return float(sum(list)) / len(list)
-    def average(values):
-        return [ave(col) for col in zip(*values)]
-    t0 = time.time() - time_len
-    dt = float(time_len) / num_points
-    last_time = [x for x in data if x[0] > t0]
-    buckets = [[] for i in range(num_points)]
-    for value in last_time:
-        buckets[int((value[0] - t0) / dt)].append(value)
-    output = []
-    for bucket in buckets:
-        if len(bucket):
-            output.append(average(bucket))
-    return output
-
 if __name__=="__main__":
-    data = LoadOldData()
+    # Build averaging buffers with old data.
+    old_data = LoadOldData()
+    print 'Preloading averaging buffers with historical data.'
+    last_hour = AveragingBuffer(60*60, 120)
+    last_day = AveragingBuffer(24*60*60, 144)
+    last_week = AveragingBuffer(7*24*60*60, 168)
+    last_hour.AddValues(old_data)
+    last_day.AddValues(old_data)
+    last_week.AddValues(old_data)
+    # Start main loop of tracking one input file.
+    print 'Starting to read live data.'
     last_pos = 0
     current_filename = GetInputFilename()
     while True:
+        start = time.time()
         # Handle filename switch over at midnight.
         if GetInputFilename() != current_filename:
-            data = LoadOldData()
             last_pos = 0
             current_filename = GetInputFilename()
+        # Read data and add to buffers.
+        data = []
         last_pos = ParseData(current_filename, last_pos, data)
-        start = time.time()
+        last_hour.AddValues(data)
+        last_day.AddValues(data)
+        last_week.AddValues(data)
+        # Output HTML summary page with plots.
         template = Template(filename='index.tpl')
         html = template.render(
             UPDATE_TIME=time.ctime(),
-            LAST_MINUTE=FormatValues(GetLastMinute(data)),
-            LAST_HOUR=FormatValues(GetAveragedTimePeriod(data, 60*60, 120)),
-            LAST_DAY=FormatValues(GetAveragedTimePeriod(data, 24*60*60, 144)),
-            LAST_WEEK=FormatValues(GetAveragedTimePeriod(data, 7*24*60*60, 168)))
+            LAST_HOUR=FormatValues(last_hour.Last()),
+            LAST_DAY=FormatValues(last_day.Last()),
+            LAST_WEEK=FormatValues(last_week.Last()))
         open('/var/www/solar/index.html', 'w').write(html)
         plottime = time.time() - start
         print time.ctime(), '| Generated plots in', plottime, 's'
