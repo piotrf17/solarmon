@@ -43,8 +43,11 @@ class AveragingBuffer(object):
                 self.temp.append(value)
 
     def Last(self):
-        average = [float(sum(col)) / len(col) for col in zip(*self.temp)]
-        return list(self.buf) + [average]
+        if self.temp:
+            average = [float(sum(col)) / len(col) for col in zip(*self.temp)]
+            return list(self.buf) + [average]
+        else:
+            return list(self.buf)
 
 def LoadOldData():
     data = []
