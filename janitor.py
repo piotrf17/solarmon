@@ -2,6 +2,7 @@
 
 import data_pb2
 import glob
+import os
 import time
 
 def LoadDataFromRaw(filename):
@@ -21,11 +22,7 @@ def SaveDataToProto(data, filename):
         data_point.solar_voltage = value[2]
         data_point.battery_current = value[3]
         data_point.battery_voltage = value[4]
-        try:
-            data_point.temperature = value[5]
-        except IndexError:
-            # TODO(piotrf): remove this check after old data processed.
-            pass
+        data_point.temperature = value[5]
     open(filename, 'wb').write(solar_data.SerializeToString())
 
 def IsProtoGood(filename, expected_len):
@@ -69,3 +66,4 @@ if __name__ == "__main__":
         # For paranoia, check that the output is good before deleting original.
         if IsProtoGood(proto_filename, len(data)):
             print 'Deleting ', filename
+            os.remove(filename)

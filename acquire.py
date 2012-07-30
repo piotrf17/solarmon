@@ -56,11 +56,17 @@ class XBMessage(object):
 class SolarData(object):
     def __init__(self, xb_msg):
         self.time = xb_msg.time
-        self.solar_current = xb_msg.solar_current / 145.9     # [A]
-        self.solar_voltage = xb_msg.solar_voltage / 30.42     # [V]
-        self.battery_current = xb_msg.battery_current / 155.1 # [A]
-        self.battery_voltage = xb_msg.battery_voltage / 30.66 # [V]
+        self.solar_current = 2 * xb_msg.solar_current / 145.9     # [A]
+        self.solar_voltage = xb_msg.solar_voltage / 30.42         # [V]
+        self.battery_current = 2 * xb_msg.battery_current / 155.1 # [A]
+        self.battery_voltage = xb_msg.battery_voltage / 30.66     # [V]
         self.temperature = 275/1664.0*xb_msg.temperature - 800/39.0 # [deg C]
+        # Clamp down values below what the Op-Amp can measure
+        if self.solar_current < 0.075:
+            self.solar_current = 0
+        if self.battery_current < 0.075:
+            self.battery_current = 0
+            
 
     def Print(self):
         print '%s| (Panel) %fA %fV / (Battery) %fA %fV / %fC'%(time.ctime(self.time), self.solar_current, self.solar_voltage, self.battery_current, self.battery_voltage, self.temperature)
