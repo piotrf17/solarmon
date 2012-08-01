@@ -109,6 +109,8 @@ if __name__=="__main__":
         start = time.time()
         # Handle filename switch over at midnight.
         if GetInputFilename() != current_filename:
+            # Sleep to give acquire time to create the new file.
+            time.sleep(30)
             last_pos = 0
             current_filename = GetInputFilename()
         # Read data and add to buffers.
