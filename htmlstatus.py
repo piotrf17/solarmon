@@ -86,6 +86,8 @@ def ParseData(filename, pos, data):
 def FormatValues(values):
     formatted = []
     for value in values:
+        if len(value) != 6:
+            continue
         dt = datetime.datetime.fromtimestamp(value[0])
         time_str = 'new Date(%d, %d, %d, %d, %d, %d, %d)'%(dt.year, dt.month-1, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond/1000)
         formatted.append('[%s, %f, %f, %f, %f, %f],\n'%tuple([time_str]+list(value[1:])))
@@ -109,10 +111,14 @@ if __name__=="__main__":
         start = time.time()
         # Handle filename switch over at midnight.
         if GetInputFilename() != current_filename:
-            # Sleep to give acquire time to create the new file.
-            time.sleep(30)
             last_pos = 0
             current_filename = GetInputFilename()
+            # Wait for the new file to be created by acquire.  Sometimes we
+            # stop getting data for a while if the board is knocked around,
+            # so we might end up waiting a while here.
+            while not(os.path.exists(current_filename)):
+                time.sleep(60)
+                current_filename = GetInputFilename()            
         # Read data and add to buffers.
         data = []
         last_pos = ParseData(current_filename, last_pos, data)

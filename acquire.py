@@ -43,6 +43,7 @@ class XBMessage(object):
         # Verify API frame for RX packet
         assert data[0] == '\x83'       # API identifier for RX packet
         assert data[1:3] == '\x22\x00' # source address
+        assert len(data) > 18
         # Parse out information
         values = struct.unpack('!BBBHHHHHH', data[3:18])
         self.time = time.time()
@@ -88,7 +89,7 @@ if __name__=="__main__":
         try:
             xb_msg = XBMessage(source.Read())
         except AssertionError:
-            print '%s| ERROR: frame api data incorrect, dropping' % (time.ctime(self.time()))
+            print '%s| ERROR: frame api data incorrect, dropping' % (time.ctime(time.time()))
         data = SolarData(xb_msg)
         data.Print()
         # Filename changes daily, for simplicity verify every output.
